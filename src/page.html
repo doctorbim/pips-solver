@@ -1,0 +1,737 @@
+<title>Pips Logic Solver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: workbench. Board + tray on the left, reasoning narrative + step ledger on the right; stacks on phones. */
+:root {
+  --bg: #eef0f4; --surface: #ffffff; --ink: #1b1f2a; --muted: #5b6273; --line: #dde1e9;
+  --board: #dcc0b4; --tile: #fbfaf7; --pip: #1d212b; --accent: #2b4cc4; --accent-soft: #e3e8fa;
+  --good: #1d7f55; --warn: #a8670f; --bad: #bf3a33; --quiet: #6e5a9e;
+  --r-purple: #8e4fc8; --r-pink: #d51a79; --r-teal: #07808e; --r-orange: #cf560e; --r-olive: #557a07; --r-navy: #3f47b0; --r-gray: #8a8f9c;
+  --tint: 44%;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12141a; --surface: #1b1e26; --ink: #e8eaf0; --muted: #a0a7b8; --line: #2d313c;
+  --board: #4a3a35; --tile: #f3f1ec; --pip: #1d212b; --accent: #8ea6ff; --accent-soft: #252c47;
+  --good: #4cc08a; --warn: #e3a64a; --bad: #f0776f; --quiet: #b49ae8;
+  --r-purple: #a86ce0; --r-pink: #e8459a; --r-teal: #1fa4b3; --r-orange: #e8752e; --r-olive: #7fa52a; --r-navy: #6d76dc; --r-gray: #8a8f9c;
+  --tint: 55%; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #12141a; --surface: #1b1e26; --ink: #e8eaf0; --muted: #a0a7b8; --line: #2d313c;
+  --board: #4a3a35; --tile: #f3f1ec; --pip: #1d212b; --accent: #8ea6ff; --accent-soft: #252c47;
+  --good: #4cc08a; --warn: #e3a64a; --bad: #f0776f; --quiet: #b49ae8;
+  --r-purple: #a86ce0; --r-pink: #e8459a; --r-teal: #1fa4b3; --r-orange: #e8752e; --r-olive: #7fa52a; --r-navy: #6d76dc; --r-gray: #8a8f9c;
+  --tint: 55%; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 48px; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+h1 { font: 800 clamp(28px, 4vw, 40px)/1 var(--f-display); letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.sub { color: var(--muted); margin: 6px 0 0; max-width: 60ch; }
+.tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; flex-wrap: wrap; }
+.tabs button { font: 600 14px var(--f-body); border: 0; background: transparent; color: var(--muted); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+.tabs button:focus-visible, .btn:focus-visible, .steps li:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 13px var(--f-mono); color: var(--muted); }
+.stats b { color: var(--ink); font-weight: 600; }
+.app { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 920px) { .app { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; min-width: 0; }
+.left { display: grid; gap: 14px; }
+.boardbox { position: relative; overflow-x: auto; }
+.boardbox svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.banner { font: 600 12px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; padding: 7px 10px; border-radius: 8px; display: flex; gap: 8px; align-items: center; }
+.banner.main { background: var(--accent-soft); color: var(--accent); }
+.banner.test { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); color: var(--warn); }
+.banner.guess { background: color-mix(in srgb, var(--quiet) 16%, var(--surface)); color: var(--quiet); }
+.boardbox.test svg .frame { stroke: var(--warn); }
+.boardbox.guess svg .frame { stroke: var(--quiet); }
+.tray-h { font: 600 12px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.tray { display: flex; flex-wrap: wrap; gap: 8px; }
+.tray svg { display: block; transition: opacity .2s; }
+.tray .used { opacity: .25; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.legend label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.right { display: grid; gap: 14px; }
+.now { display: grid; gap: 10px; }
+.now-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.now h2 { font: 800 24px/1.1 var(--f-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.count { font: 13px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.text { max-height: 360px; overflow-y: auto; padding-right: 4px; }
+.text p { margin: 0; }
+ul.why { margin: 8px 0 4px; padding-left: 18px; font-size: 13.5px; color: var(--muted); display: grid; gap: 3px; }
+ul.why li::marker { color: var(--line); }
+.cell { font: 600 12.5px var(--f-mono); background: var(--accent-soft); color: var(--accent); border-radius: 5px; padding: 0 4px; cursor: default; }
+.rg { font: 600 12.5px var(--f-body); background: var(--rc); color: #fff; border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.dm { display: inline-flex; vertical-align: -3px; border: 1.5px solid var(--ink); border-radius: 5px; overflow: hidden; background: var(--tile); }
+.dm i { font: 600 12px/18px var(--f-mono); font-style: normal; color: var(--pip); width: 18px; text-align: center; }
+.dm i + i { border-left: 1.5px solid var(--pip); }
+.chip { font: 600 11px var(--f-mono); letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; border: 1.5px solid currentColor; white-space: nowrap; }
+.k-start, .k-narrow, .k-link { color: var(--accent); }
+.k-place, .k-spot, .k-solved { color: var(--good); }
+.k-suppose, .k-stuck { color: var(--warn); }
+.k-guess, .k-back, .k-refute { color: var(--quiet); }
+.k-dead { color: var(--bad); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 600 14px var(--f-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: 10px; cursor: pointer; min-width: 44px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:disabled { opacity: .4; cursor: default; }
+input[type="range"] { flex: 1 1 160px; accent-color: var(--accent); min-width: 0; }
+select { font: 14px var(--f-body); padding: 7px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.ledger-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.ledger-head h3 { font: 800 17px var(--f-display); margin: 0; }
+.steps { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; display: grid; gap: 2px; position: relative; }
+.steps li { display: grid; grid-template-columns: 3.2em auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13.5px; }
+.steps li:hover { background: var(--bg); }
+.steps li.cur { background: var(--accent-soft); }
+.steps li .n { font: 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.steps li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps li[data-depth]:not([data-depth="0"]) .t { border-left: 2px solid var(--line); padding-left: 8px; }
+.editor { display: grid; gap: 16px; }
+.editor textarea { width: 100%; min-height: 240px; font: 13.5px/1.5 var(--f-mono); padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ed-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+.ed-head h2 { font: 800 22px var(--f-display); margin: 0; }
+.ed-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .ed-grid { grid-template-columns: minmax(0, 1fr); } }
+.ed-col { display: grid; gap: 14px; min-width: 0; }
+.ed-step { font: 600 12px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.shot { border: 2px dashed var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.shot.drag { border-color: var(--accent); background: var(--accent-soft); }
+.shot img { max-height: 220px; max-width: 100%; width: auto; border-radius: 8px; border: 1px solid var(--line); justify-self: start; }
+.shot .note { font-size: 13.5px; color: var(--muted); margin: 0; }
+.shot input[type="file"] { max-width: 100%; font-size: 13px; }
+.status { font-size: 14px; margin: 0; }
+.status.err { color: var(--bad); }
+.status.ok { color: var(--good); }
+.paint { overflow-x: auto; padding: 4px; }
+.paint-grid { display: grid; gap: 3px; width: max-content; touch-action: none; user-select: none; background: var(--line); padding: 3px; border-radius: 10px; }
+.pc { width: 42px; height: 42px; border: 0; border-radius: 7px; background: var(--surface); font: 600 12px var(--f-mono); cursor: crosshair; padding: 0; position: relative; }
+.pc.gap { background: var(--bg); }
+.pc.free { background: color-mix(in srgb, var(--surface) 30%, var(--board)); }
+.pc .lab { position: absolute; right: 3px; bottom: 1px; font-size: 10px; }
+.brushes { display: flex; flex-wrap: wrap; gap: 6px; }
+.brush { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 9px; padding: 5px 9px; font: 600 13px var(--f-body); cursor: pointer; }
+.brush[aria-pressed="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px var(--accent-soft); }
+.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid var(--line); }
+.regs { display: grid; gap: 6px; }
+.reg { display: grid; grid-template-columns: 30px minmax(0, 1.3fr) 60px minmax(0, 1fr) 36px; gap: 6px; align-items: center; }
+.reg .key { width: 30px; height: 30px; border-radius: 7px; color: #fff; font: 700 14px var(--f-mono); display: grid; place-items: center; }
+.reg input, .reg select, .sz input, .addd select, .fld { min-width: 0; width: 100%; font: 14px var(--f-body); padding: 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.reg input:disabled { opacity: .35; }
+.sz { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 14px; }
+.sz label { display: inline-flex; gap: 6px; align-items: center; }
+.sz input { width: 64px; }
+.dlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.dchip { display: inline-flex; align-items: center; gap: 2px; }
+.dchip button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 3px; }
+.addd { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.addd select { width: 58px; }
+.check { font-size: 13.5px; margin: 0; color: var(--muted); }
+.check.bad { color: var(--warn); }
+.check.good { color: var(--good); }
+.errors { color: var(--bad); font-size: 14px; margin: 0; padding-left: 18px; }
+details { font-size: 14px; color: var(--muted); }
+details summary { cursor: pointer; color: var(--ink); font-weight: 600; margin-bottom: 8px; }
+details code { font: 13px var(--f-mono); color: var(--ink); }
+.fresh { animation: pop .35s ease-out; transform-box: fill-box; transform-origin: center; }
+@keyframes pop { from { transform: scale(.85); opacity: .3; } to { transform: scale(1); opacity: 1; } }
+.hl { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { stroke-opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .fresh, .hl { animation: none; } }
+.hover-ring { display: none; }
+.hover-ring.on { display: inline; }
+.empty { color: var(--muted); font-size: 14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Pips <span>Logic</span> Solver</h1>
+      <p class="sub">Step through how each puzzle gets solved: which rule forces each domino, what gets ruled out, and where a free choice is made. Hover a cell name in the reasoning to find it on the board. Use Create to add a new puzzle from a screenshot or by hand.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Puzzle">
+      <button role="tab" id="tab-easy" data-k="easy" aria-selected="true">Easy</button>
+      <button role="tab" id="tab-medium" data-k="medium" aria-selected="false">Medium</button>
+      <button role="tab" id="tab-hard" data-k="hard" aria-selected="false">Hard</button>
+      <button role="tab" id="tab-custom" data-k="custom" aria-selected="false">Create</button>
+    </div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <section class="panel editor" id="editor" hidden>
+    <div class="ed-head">
+      <h2>Puzzle creator</h2>
+      <div class="row">
+        <select id="saved" class="fld" style="width:auto" aria-label="Saved puzzles"><option value="">My saved puzzles…</option></select>
+        <button class="btn" id="loadSaved">Load</button>
+        <button class="btn" id="delSaved">Delete</button>
+      </div>
+    </div>
+    <div class="ed-grid">
+      <div class="ed-col">
+        <div class="shot" id="shot">
+          <p class="ed-step">1 · Read a screenshot (optional)</p>
+          <div id="shotOn" hidden>
+            <p class="note">Drop or paste a Pips screenshot here, or choose a file. Claude reads the board, regions and tray into the creator below. Compare the result with your screenshot before solving.</p>
+            <div class="row" style="margin-top:8px">
+              <input type="file" id="shotFile" accept="image/png,image/jpeg,image/webp" aria-label="Screenshot file">
+              <button class="btn primary" id="readShot" disabled>Read puzzle</button>
+              <button class="btn" id="stopShot" hidden>Stop</button>
+            </div>
+          </div>
+          <p class="note" id="shotOff">Screenshot reading works when this page is open on claude.ai and you allow it to use Claude. You can always build the puzzle by hand below.</p>
+          <img id="shotImg" alt="Your screenshot" hidden>
+          <p class="status" id="shotStatus" hidden></p>
+        </div>
+        <div>
+          <p class="ed-step">2 · Paint the board</p>
+          <div class="sz">
+            <label>Rows <input type="number" id="rows" min="1" max="12" value="4"></label>
+            <label>Columns <input type="number" id="cols" min="1" max="12" value="4"></label>
+            <button class="btn" id="clearBoard">Clear board</button>
+          </div>
+          <p class="check" style="margin:8px 0">Pick a brush, then click or drag across cells. Each dashed region on your puzzle gets its own brush.</p>
+          <div class="brushes" id="brushes"></div>
+          <div class="paint" style="margin-top:10px"><div class="paint-grid" id="paint"></div></div>
+        </div>
+      </div>
+      <div class="ed-col">
+        <div>
+          <p class="ed-step">3 · Set region rules</p>
+          <div class="regs" id="regs"></div>
+          <button class="btn" id="newReg" style="margin-top:8px">+ New region</button>
+        </div>
+        <div>
+          <p class="ed-step">4 · Fill the tray</p>
+          <div class="dlist" id="dlist"></div>
+          <div class="addd" style="margin-top:8px">
+            <select id="dA" aria-label="First half pips"></select>
+            <select id="dB" aria-label="Second half pips"></select>
+            <button class="btn" id="addD">Add domino</button>
+          </div>
+          <p class="check" id="tally" style="margin-top:6px"></p>
+        </div>
+        <ul class="errors" id="errs" hidden></ul>
+        <div class="row">
+          <button class="btn primary" id="solve">Solve this puzzle</button>
+          <input type="text" id="saveName" class="fld" placeholder="Name, e.g. Oct 13 Hard" aria-label="Puzzle name" style="flex:1 1 140px;width:auto;padding:8px">
+          <button class="btn" id="save">Save</button>
+        </div>
+        <details>
+          <summary>Text format (edit directly, or copy to share)</summary>
+          <textarea id="src" spellcheck="false" aria-label="Puzzle as text"></textarea>
+          <div class="row" style="margin-top:6px"><button class="btn" id="applyText">Apply text to creator</button></div>
+          <p><code>board:</code> one line per row. A letter is a region cell, <code>#</code> a cell with no rule, <code>.</code> a gap. <code>regions:</code> letter, rule (<code>6</code>, <code>&lt;4</code>, <code>&gt;8</code>, <code>=</code>, <code>!=</code>, <code>any</code>), optional colour. <code>dominoes:</code> pairs like <code>66 61 30</code>; a blank half is 0.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <div class="app">
+    <div class="left">
+      <section class="panel" style="display:grid;gap:12px">
+        <div class="banner main" id="banner">Main line of reasoning</div>
+        <div class="boardbox" id="boardbox"></div>
+        <div class="legend">
+          <label><input type="checkbox" id="showCands" checked> Show candidates in empty cells</label>
+          <label><input type="checkbox" id="showAxes" checked> Show row/column numbers</label>
+        </div>
+      </section>
+      <section class="panel">
+        <p class="tray-h">Tray</p>
+        <div class="tray" id="tray"></div>
+      </section>
+    </div>
+
+    <div class="right">
+      <section class="panel now" aria-live="polite">
+        <div class="now-top">
+          <span class="chip" id="kind"></span>
+          <span class="count" id="count"></span>
+        </div>
+        <h2 id="stitle"></h2>
+        <div class="text" id="stext"></div>
+        <div class="controls">
+          <button class="btn" id="first" aria-label="First step">⏮</button>
+          <button class="btn" id="prev" aria-label="Previous step">◀</button>
+          <button class="btn primary" id="play">Play</button>
+          <button class="btn" id="next" aria-label="Next step">▶</button>
+          <button class="btn" id="last" aria-label="Jump to solution">⏭</button>
+          <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step">
+          <select id="speed" aria-label="Playback speed">
+            <option value="2200">Slow</option>
+            <option value="1200" selected>Normal</option>
+            <option value="500">Fast</option>
+          </select>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="ledger-head">
+          <h3>Every step</h3>
+          <select id="filter" aria-label="Which steps to show">
+            <option value="all">All reasoning</option>
+            <option value="key">Placements and decisions</option>
+          </select>
+        </div>
+        <ol class="steps" id="steps"></ol>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+/*CORE*/
+</script>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  const KIND = { start: 'Set up', narrow: 'Candidates', link: 'Pair', place: 'Placed', spot: 'Placed', suppose: 'What-if', dead: 'Contradiction', refute: 'Ruled out', stuck: 'Stuck', guess: 'Choice', back: 'Undo', solved: 'Solved' };
+  const KEY = new Set(['start', 'place', 'spot', 'refute', 'guess', 'back', 'solved']);
+  const S = 64, PAD = 30;
+  let P = null, R = null, sols = null, vis = [], pos = 0, timer = null, tab = 'easy';
+
+  function run(text) {
+    const p = parsePuzzle(text);
+    if (p.errors.length) return p;
+    P = p; R = solvePuzzle(p); sols = countSolutions(p);
+    vis = []; pos = 0; buildList(); go(0); stats();
+    return p;
+  }
+
+  function stats() {
+    const solTxt = sols.complete ? (sols.count === 1 ? 'exactly 1 valid answer' : `${sols.count} valid answers`) : `${sols.count}+ valid answers`;
+    $('#stats').innerHTML = `<span><b>${P.cells.length}</b> cells</span><span><b>${P.dominoes.length}</b> dominoes</span><span><b>${R.steps.length}</b> reasoning steps</span><span><b>${R.whatifs}</b> what-if tests</span><span><b>${R.guesses}</b> free choices</span><span>${R.solved ? solTxt : '<b>no solution found</b>'}</span>`;
+  }
+
+  // ---------- board ----------
+  const xy = c => [PAD + c.c * S, PAD + c.r * S];
+  const PIPS = { 0: [], 1: [[.5, .5]], 2: [[.27, .27], [.73, .73]], 3: [[.27, .27], [.5, .5], [.73, .73]], 4: [[.27, .27], [.73, .27], [.27, .73], [.73, .73]], 5: [[.27, .27], [.73, .27], [.5, .5], [.27, .73], [.73, .73]] };
+  function pips(v, x, y, w, h, vertical, r) {
+    let pts = PIPS[v];
+    if (v === 6) pts = vertical ? [[.3, .22], [.3, .5], [.3, .78], [.7, .22], [.7, .5], [.7, .78]] : [[.22, .3], [.5, .3], [.78, .3], [.22, .7], [.5, .7], [.78, .7]];
+    return pts.map(([px, py]) => `<circle cx="${x + px * w}" cy="${y + py * h}" r="${r}" fill="var(--pip)"/>`).join('');
+  }
+  function outline(g) {
+    const inR = new Set(g.cells.map(id => P.cells[id].r + ',' + P.cells[id].c));
+    const I = (r, c) => inR.has(r + ',' + c);
+    const i = 7, segs = [];
+    for (const id of g.cells) {
+      const { r, c } = P.cells[id];
+      const [x0, y0] = xy(P.cells[id]), x1 = x0 + S, y1 = y0 + S;
+      const end = (side, dr, dc, base, inner) => !I(r + dr, c + dc) ? base + inner : !I(r + dr + side[0], c + dc + side[1]) ? base : base - inner;
+      if (!I(r - 1, c)) segs.push([end([-1, 0], 0, -1, x0, i), y0 + i, end([-1, 0], 0, 1, x1, -i), y0 + i]);
+      if (!I(r + 1, c)) segs.push([end([1, 0], 0, -1, x0, i), y1 - i, end([1, 0], 0, 1, x1, -i), y1 - i]);
+      if (!I(r, c - 1)) segs.push([x0 + i, end([0, -1], -1, 0, y0, i), x0 + i, end([0, -1], 1, 0, y1, -i)]);
+      if (!I(r, c + 1)) segs.push([x1 - i, end([0, 1], -1, 0, y0, i), x1 - i, end([0, 1], 1, 0, y1, -i)]);
+    }
+    return segs.map(([a, b, c, d]) => `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}"/>`).join('');
+  }
+
+  function drawBoard(step) {
+    const snap = step.snap, W = PAD * 2 + P.cols * S, H = PAD * 2 + P.rows * S;
+    const axes = $('#showAxes').checked, cands = $('#showCands').checked;
+    let o = `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Puzzle board at step ${pos + 1}">`;
+    o += `<rect class="frame" x="2" y="2" width="${W - 4}" height="${H - 4}" rx="14" fill="none" stroke="transparent" stroke-width="3" stroke-dasharray="10 6"/>`;
+    if (axes) {
+      for (let c = 0; c < P.cols; c++) o += `<text x="${PAD + c * S + S / 2}" y="${PAD - 10}" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--muted)">${c + 1}</text>`;
+      for (let r = 0; r < P.rows; r++) o += `<text x="${PAD - 12}" y="${PAD + r * S + S / 2 + 4}" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--muted)">${r + 1}</text>`;
+    }
+    for (const c of P.cells) { const [x, y] = xy(c); o += `<rect x="${x - 3}" y="${y - 3}" width="${S + 6}" height="${S + 6}" rx="10" fill="var(--board)"/>`; }
+    for (const c of P.cells) {
+      const [x, y] = xy(c), g = P.regions[c.reg];
+      const fill = g ? `color-mix(in srgb, var(--r-${g.color}) var(--tint), var(--board))` : 'color-mix(in srgb, var(--surface) 30%, var(--board))';
+      const tip = `R${c.r + 1}C${c.c + 1}` + (g ? ` · ${g.color} region ${ruleLabel(g) || '(no rule)'}` : ' · no rule');
+      o += `<rect x="${x + 4}" y="${y + 4}" width="${S - 8}" height="${S - 8}" rx="9" fill="${fill}"><title>${tip}</title></rect>`;
+    }
+    for (const g of P.regions) o += `<g stroke="var(--r-${g.color})" stroke-width="2.6" stroke-dasharray="7 5" stroke-linecap="round" fill="none">${outline(g)}</g>`;
+    if (cands) for (const c of P.cells) {
+      if (snap.mate[c.id] >= 0) continue;
+      const [x, y] = xy(c), m = snap.dom[c.id];
+      for (let v = 0; v <= 6; v++) if ((m >> v) & 1) {
+        const cx = x + 17 + (v % 3) * 15, cy = y + 21 + Math.floor(v / 3) * 14;
+        o += `<text x="${cx}" y="${cy}" text-anchor="middle" font-family="var(--f-mono)" font-size="12" font-weight="600" fill="var(--ink)" opacity=".72">${v}</text>`;
+      }
+    }
+    // forced pairs not yet filled
+    const doneLink = new Set();
+    snap.link.forEach((b, a) => {
+      if (b < 0 || doneLink.has(a)) return; doneLink.add(b);
+      const [ax, ay] = xy(P.cells[a]), [bx, by] = xy(P.cells[b]);
+      const x = Math.min(ax, bx), y = Math.min(ay, by), w = Math.abs(ax - bx) + S, h = Math.abs(ay - by) + S;
+      o += `<rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="11" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4" opacity=".7"/>`;
+    });
+    // placed dominoes
+    const fresh = ['place', 'spot', 'guess', 'suppose'].includes(step.kind) ? step.domino : null;
+    for (const pl of snap.placed) {
+      let [a, b, x1v, y1v] = [pl.a, pl.b, pl.x, pl.y];
+      const A = P.cells[a], B = P.cells[b];
+      if (B.r < A.r || B.c < A.c) { [a, b] = [b, a]; [x1v, y1v] = [y1v, x1v]; }
+      const [x, y] = xy(P.cells[a]), vert = P.cells[a].c === P.cells[b].c;
+      const w = vert ? S : 2 * S, h = vert ? 2 * S : S, ins = 8;
+      const isFresh = pl.d === fresh;
+      o += `<g class="${isFresh ? 'fresh' : ''}"><rect x="${x + ins}" y="${y + ins}" width="${w - 2 * ins}" height="${h - 2 * ins}" rx="10" fill="var(--tile)" stroke="${isFresh ? 'var(--accent)' : 'var(--pip)'}" stroke-width="${isFresh ? 3.5 : 2}"/>`;
+      o += vert ? `<line x1="${x + ins + 6}" y1="${y + S}" x2="${x + S - ins - 6}" y2="${y + S}" stroke="var(--pip)" stroke-opacity=".25" stroke-width="1.5"/>`
+                : `<line x1="${x + S}" y1="${y + ins + 6}" x2="${x + S}" y2="${y + S - ins - 6}" stroke="var(--pip)" stroke-opacity=".25" stroke-width="1.5"/>`;
+      const ac = S - 2 * ins, al = S - ins;
+      o += vert ? pips(x1v, x + ins, y + ins, ac, al, vert, 4.2) + pips(y1v, x + ins, y + S, ac, al, vert, 4.2)
+                : pips(x1v, x + ins, y + ins, al, ac, vert, 4.2) + pips(y1v, x + S, y + ins, al, ac, vert, 4.2);
+      o += `</g>`;
+    }
+    for (const id of step.cells) { const [x, y] = xy(P.cells[id]); o += `<rect class="hl" x="${x + 2}" y="${y + 2}" width="${S - 4}" height="${S - 4}" rx="11" fill="none" stroke="var(--accent)" stroke-width="3.5"/>`; }
+    for (const c of P.cells) { const [x, y] = xy(c); o += `<rect class="hover-ring" id="hv-${c.id}" x="${x}" y="${y}" width="${S}" height="${S}" rx="12" fill="none" stroke="var(--ink)" stroke-width="3"/>`; }
+    // rule diamonds at the bottom-right of each region's last cell
+    for (const g of P.regions) {
+      const lab = ruleLabel(g); if (!lab) continue;
+      const anchor = g.cells.map(id => P.cells[id]).sort((p, q) => q.r - p.r || q.c - p.c)[0];
+      const [x, y] = xy(anchor), cx = x + S - 2, cy = y + S - 2;
+      const t = lab.replace('<', '&lt;').replace('>', '&gt;');
+      o += `<g><rect x="${cx - 15}" y="${cy - 15}" width="30" height="30" rx="5" transform="rotate(45 ${cx} ${cy})" fill="var(--r-${g.color})" stroke="var(--surface)" stroke-width="1.5"/><text x="${cx}" y="${cy + 6}" text-anchor="middle" font-family="var(--f-display)" font-weight="800" font-size="${lab.length > 2 ? 14 : 17}" fill="#fff">${t}</text></g>`;
+    }
+    o += `</svg>`;
+    const box = $('#boardbox');
+    box.className = 'boardbox ' + step.mode;
+    box.innerHTML = o;
+  }
+
+  function drawTray(step) {
+    const used = step.snap.used, fresh = step.domino;
+    $('#tray').innerHTML = P.dominoes.map(([a, b], i) => {
+      const w = 76, h = 40, hs = 30;
+      const hot = i === fresh && ['place', 'spot', 'guess', 'suppose'].includes(step.kind);
+      return `<svg class="${used[i] ? 'used' : ''}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Domino ${a}-${b}${used[i] ? ', placed' : ''}">
+        <rect x="2" y="2" width="${w - 4}" height="${h - 4}" rx="8" fill="var(--tile)" stroke="${hot ? 'var(--accent)' : 'var(--pip)'}" stroke-width="${hot ? 3 : 1.6}"/>
+        <line x1="${w / 2}" y1="8" x2="${w / 2}" y2="${h - 8}" stroke="var(--pip)" stroke-opacity=".25"/>
+        ${pips(a, 5, 5, hs, hs, false, 3)}${pips(b, w / 2 + 3, 5, hs, hs, false, 3)}</svg>`;
+    }).join('');
+  }
+
+  // ---------- step list ----------
+  function buildList() {
+    const f = $('#filter').value;
+    vis = R.steps.map((s, i) => i).filter(i => f === 'all' || KEY.has(R.steps[i].kind) || i === R.steps.length - 1);
+    $('#steps').innerHTML = vis.map((i, k) => {
+      const s = R.steps[i];
+      return `<li tabindex="0" data-k="${k}" data-depth="${s.depth}"><span class="n">${i + 1}</span><span class="chip k-${s.kind}">${KIND[s.kind]}</span><span class="t" style="margin-left:${Math.min(s.depth, 6) * 10}px">${s.title}</span></li>`;
+    }).join('');
+    $('#scrub').max = vis.length - 1;
+  }
+
+  function go(k) {
+    pos = Math.max(0, Math.min(vis.length - 1, k));
+    const i = vis[pos], s = R.steps[i];
+    drawBoard(s); drawTray(s);
+    $('#kind').className = 'chip k-' + s.kind; $('#kind').textContent = KIND[s.kind];
+    $('#count').textContent = `step ${i + 1} of ${R.steps.length}`;
+    $('#stitle').textContent = s.title;
+    $('#stext').innerHTML = `<p>${s.text}</p>`;
+    $('#stext').scrollTop = 0;
+    const b = $('#banner');
+    b.className = 'banner ' + s.mode;
+    b.textContent = s.mode === 'test' ? 'What-if test · this board is hypothetical' : s.mode === 'guess' ? 'Inside a free choice · these moves depend on it' : (s.kind === 'solved' ? 'Solved' : 'Main line of reasoning');
+    $('#scrub').value = pos;
+    $('#prev').disabled = $('#first').disabled = pos === 0;
+    $('#next').disabled = $('#last').disabled = pos === vis.length - 1;
+    const list = $('#steps'), li = list.children[pos];
+    list.querySelectorAll('.cur').forEach(e => e.classList.remove('cur'));
+    if (li) {
+      li.classList.add('cur');
+      const top = li.offsetTop - list.offsetTop;
+      if (top < list.scrollTop || top + li.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top - list.clientHeight / 2;
+    }
+    if (pos === vis.length - 1) stop();
+  }
+
+  function stop() { clearInterval(timer); timer = null; $('#play').textContent = 'Play'; }
+  function play() {
+    if (timer) return stop();
+    if (pos === vis.length - 1) go(0);
+    $('#play').textContent = 'Pause';
+    timer = setInterval(() => go(pos + 1), +$('#speed').value);
+  }
+
+  // ---------- wiring ----------
+  $('#first').onclick = () => { stop(); go(0); };
+  $('#prev').onclick = () => { stop(); go(pos - 1); };
+  $('#next').onclick = () => { stop(); go(pos + 1); };
+  $('#last').onclick = () => { stop(); go(vis.length - 1); };
+  $('#play').onclick = play;
+  $('#speed').onchange = () => { if (timer) { stop(); play(); } };
+  $('#scrub').oninput = e => { stop(); go(+e.target.value); };
+  $('#steps').onclick = e => { const li = e.target.closest('li'); if (li) { stop(); go(+li.dataset.k); } };
+  $('#steps').onkeydown = e => { const li = e.target.closest('li'); if (li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); stop(); go(+li.dataset.k); } };
+  $('#filter').onchange = () => { const cur = vis[pos]; buildList(); let k = vis.findIndex(i => i >= cur); go(k < 0 ? vis.length - 1 : k); };
+  $('#showCands').onchange = $('#showAxes').onchange = () => go(pos);
+  document.addEventListener('keydown', e => {
+    if (/TEXTAREA|INPUT|SELECT/.test(e.target.tagName) && e.target.type !== 'range') return;
+    if (e.key === 'ArrowRight') { stop(); go(pos + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { stop(); go(pos - 1); e.preventDefault(); }
+    else if (e.key === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'LI') { play(); e.preventDefault(); }
+  });
+  const hover = e => {
+    const el = e.target.closest && e.target.closest('.cell[data-c]');
+    document.querySelectorAll('.hover-ring.on').forEach(r => r.classList.remove('on'));
+    if (el && e.type === 'mouseover') { const r = document.getElementById('hv-' + el.dataset.c); if (r) r.classList.add('on'); }
+  };
+  $('#stext').addEventListener('mouseover', hover);
+  $('#stext').addEventListener('mouseout', hover);
+
+  // ---------- creator ----------
+  const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const RULES = [['sum', 'Sum ='], ['lt', 'Sum <'], ['gt', 'Sum >'], ['eq', 'All equal'], ['neq', 'All different'], ['none', 'No rule']];
+  let M = null, brush = '#', painting = false;
+  const esc = t => String(t).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+
+  function modelFromText(text) {
+    const p = parsePuzzle(text);
+    const rows = Math.max(1, p.rows), cols = Math.max(1, p.cols);
+    const grid = Array.from({ length: rows }, () => Array(cols).fill('.'));
+    p.cells.forEach(c => { grid[c.r][c.c] = c.key === null ? '#' : c.key; });
+    const regions = {};
+    p.regions.forEach(g => { regions[g.key] = { type: g.type, n: g.n ?? 0, color: g.color }; });
+    return { title: p.title || '', rows, cols, grid, regions, dominoes: p.dominoes.map(d => d.slice()) };
+  }
+  function textFromModel(m) {
+    const used = new Set(m.grid.flat());
+    const lines = [];
+    if (m.title) lines.push('# ' + m.title);
+    lines.push('board:', ...m.grid.map(r => r.join('').replace(/\.+$/, '') || '.'));
+    lines.push('regions:');
+    for (const k of Object.keys(m.regions)) {
+      if (!used.has(k)) continue;
+      const g = m.regions[k];
+      const rule = g.type === 'sum' ? g.n : g.type === 'lt' ? '<' + g.n : g.type === 'gt' ? '>' + g.n : g.type === 'eq' ? '=' : g.type === 'neq' ? '!=' : 'any';
+      lines.push(`${k} ${rule} ${g.color}`);
+    }
+    lines.push('dominoes: ' + m.dominoes.map(d => d.join('')).join(' '));
+    return lines.join('\n');
+  }
+  function sync() { $('#src').value = textFromModel(M); store.set('pips-custom', $('#src').value); }
+  function nextKey() { return [...LETTERS].find(k => !(k in M.regions)); }
+  function nextColor() {
+    const counts = {}; COLOR_NAMES.slice(0, 6).forEach(c => { counts[c] = 0; });
+    Object.values(M.regions).forEach(g => { if (g.color in counts) counts[g.color]++; });
+    return Object.keys(counts).sort((a, b) => counts[a] - counts[b])[0];
+  }
+  const tintOf = color => `color-mix(in srgb, var(--r-${color}) var(--tint), var(--board))`;
+
+  function drawBrushes() {
+    if (brush !== '#' && brush !== '.' && !(brush in M.regions)) brush = '#';
+    const items = [['#', 'Free cell', 'color-mix(in srgb, var(--surface) 30%, var(--board))'], ['.', 'Eraser', 'var(--bg)'],
+      ...Object.keys(M.regions).map(k => [k, `${k} · ${M.regions[k].color} ${ruleLabel(M.regions[k]) || 'no rule'}`, `var(--r-${M.regions[k].color})`])];
+    $('#brushes').innerHTML = items.map(([k, label, col]) =>
+      `<button class="brush" data-b="${esc(k)}" aria-pressed="${k === brush}"><span class="sw" style="background:${col}"></span>${esc(label)}</button>`).join('');
+  }
+  function drawPaint() {
+    const g = $('#paint');
+    g.style.gridTemplateColumns = `repeat(${M.cols}, 42px)`;
+    const anchors = {};
+    M.grid.forEach((row, r) => row.forEach((k, c) => { if (k in M.regions) anchors[k] = [r, c]; }));
+    g.innerHTML = M.grid.map((row, r) => row.map((k, c) => {
+      let cls = 'pc', style = '', lab = '', txt = '';
+      if (k === '.') cls += ' gap';
+      else if (k === '#') cls += ' free';
+      else {
+        const reg = M.regions[k] || { color: 'gray', type: 'none' };
+        style = `background:${tintOf(reg.color)};box-shadow:inset 0 0 0 2px var(--r-${reg.color})`;
+        const a = anchors[k];
+        if (a && a[0] === r && a[1] === c) lab = ruleLabel(reg);
+        txt = k;
+      }
+      const what = k === '.' ? 'gap' : k === '#' ? 'free cell' : 'region ' + k;
+      return `<button class="${cls}" style="${style}" data-r="${r}" data-c="${c}" aria-label="Row ${r + 1} column ${c + 1}: ${esc(what)}"><span style="color:var(--ink)">${esc(txt)}</span><span class="lab" style="color:var(--ink)">${esc(lab)}</span></button>`;
+    }).join('')).join('');
+  }
+  function drawRegs() {
+    const used = new Set(M.grid.flat());
+    const keys = Object.keys(M.regions);
+    $('#regs').innerHTML = keys.length ? keys.map(k => {
+      const g = M.regions[k], needsN = ['sum', 'lt', 'gt'].includes(g.type);
+      return `<div class="reg" data-k="${esc(k)}">
+        <span class="key" style="background:var(--r-${g.color})" title="${used.has(k) ? 'Region ' + esc(k) : 'Not painted on the board yet'}">${esc(k)}</span>
+        <select data-f="type" aria-label="Rule for region ${esc(k)}">${RULES.map(([v, l]) => `<option value="${v}"${v === g.type ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        <input data-f="n" type="number" min="0" max="99" value="${g.n}" ${needsN ? '' : 'disabled'} aria-label="Number for region ${esc(k)}">
+        <select data-f="color" aria-label="Colour for region ${esc(k)}">${COLOR_NAMES.map(c => `<option${c === g.color ? ' selected' : ''}>${c}</option>`).join('')}</select>
+        <button class="btn" data-f="del" aria-label="Delete region ${esc(k)}" style="min-width:0;padding:6px">✕</button>
+      </div>`;
+    }).join('') : '<p class="check">No regions yet. Add one, then paint its cells.</p>';
+  }
+  function drawTrayEd() {
+    $('#dlist').innerHTML = M.dominoes.map(([a, b], i) => `<span class="dchip"><span class="dm"><i>${a}</i><i>${b}</i></span><button data-i="${i}" aria-label="Remove domino ${a}-${b}">✕</button></span>`).join('') || '<span class="check">No dominoes yet.</span>';
+    const cells = M.grid.flat().filter(k => k !== '.').length, need = cells / 2;
+    const t = $('#tally');
+    if (cells % 2) { t.className = 'check bad'; t.textContent = `The board has ${cells} cells, an odd number. Every domino covers two, so check the board.`; }
+    else if (M.dominoes.length !== need) { t.className = 'check bad'; t.textContent = `${M.dominoes.length} of ${need} dominoes added (the board has ${cells} cells).`; }
+    else { t.className = 'check good'; t.textContent = `${M.dominoes.length} dominoes for ${cells} cells. Ready to solve.`; }
+  }
+  function drawEditor() { drawBrushes(); drawPaint(); drawRegs(); drawTrayEd(); $('#rows').value = M.rows; $('#cols').value = M.cols; }
+  function setModel(m) { M = m; drawEditor(); sync(); }
+
+  // painting
+  function paintAt(el) {
+    if (!el || el.dataset.r === undefined) return;
+    const r = +el.dataset.r, c = +el.dataset.c;
+    if (M.grid[r][c] === brush) return;
+    M.grid[r][c] = brush;
+    drawPaint(); drawRegs(); drawTrayEd(); sync();
+  }
+  $('#paint').addEventListener('pointerdown', e => { const el = e.target.closest('.pc'); if (!el) return; painting = true; e.preventDefault(); paintAt(el); });
+  $('#paint').addEventListener('pointermove', e => { if (!painting) return; const el = document.elementFromPoint(e.clientX, e.clientY); paintAt(el && el.closest('.pc')); });
+  window.addEventListener('pointerup', () => { painting = false; });
+  $('#paint').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); paintAt(e.target.closest('.pc')); } });
+  $('#brushes').onclick = e => { const b = e.target.closest('.brush'); if (b) { brush = b.dataset.b; drawBrushes(); } };
+  function resize() {
+    const rows = Math.max(1, Math.min(12, +$('#rows').value || 1)), cols = Math.max(1, Math.min(12, +$('#cols').value || 1));
+    M.grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => (M.grid[r] && M.grid[r][c]) || '.'));
+    M.rows = rows; M.cols = cols; drawPaint(); drawRegs(); drawTrayEd(); sync();
+  }
+  $('#rows').onchange = $('#cols').onchange = resize;
+  $('#clearBoard').onclick = () => { M.grid = M.grid.map(r => r.map(() => '.')); drawPaint(); drawRegs(); drawTrayEd(); sync(); };
+  $('#newReg').onclick = () => {
+    const k = nextKey(); if (!k) return;
+    M.regions[k] = { type: 'sum', n: 0, color: nextColor() };
+    brush = k; drawBrushes(); drawRegs(); sync();
+  };
+  $('#regs').addEventListener('change', e => {
+    const row = e.target.closest('.reg'); if (!row) return;
+    const g = M.regions[row.dataset.k], f = e.target.dataset.f;
+    if (f === 'type') g.type = e.target.value;
+    if (f === 'n') g.n = Math.max(0, +e.target.value || 0);
+    if (f === 'color') g.color = e.target.value;
+    drawEditor(); sync();
+  });
+  $('#regs').addEventListener('click', e => {
+    const b = e.target.closest('[data-f="del"]'); if (!b) return;
+    const k = b.closest('.reg').dataset.k;
+    delete M.regions[k];
+    M.grid = M.grid.map(r => r.map(x => x === k ? '#' : x));
+    drawEditor(); sync();
+  });
+  const opts = [0, 1, 2, 3, 4, 5, 6].map(v => `<option value="${v}">${v}</option>`).join('');
+  $('#dA').innerHTML = opts; $('#dB').innerHTML = opts;
+  $('#addD').onclick = () => { M.dominoes.push([+$('#dA').value, +$('#dB').value]); drawTrayEd(); sync(); };
+  $('#dlist').onclick = e => { const b = e.target.closest('button[data-i]'); if (b) { M.dominoes.splice(+b.dataset.i, 1); drawTrayEd(); sync(); } };
+  $('#applyText').onclick = () => { setModel(modelFromText($('#src').value)); showErrors(parsePuzzle($('#src').value).errors); };
+  $('#src').oninput = () => store.set('pips-custom', $('#src').value);
+  $('#solve').onclick = () => { stop(); const p = run(textFromModel(M)); showErrors(p.errors); if (!p.errors.length) document.querySelector('.app').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+
+  // saved puzzles (kept in this browser only)
+  const loadSavedList = () => { try { return JSON.parse(store.get('pips-saved') || '[]'); } catch (e) { return []; } };
+  function drawSaved() {
+    $('#saved').innerHTML = '<option value="">My saved puzzles…</option>' + loadSavedList().map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join('');
+  }
+  $('#save').onclick = () => {
+    const name = $('#saveName').value.trim() || M.title || `Puzzle ${new Date().toLocaleDateString()}`;
+    M.title = name; sync();
+    const list = loadSavedList().filter(p => p.name !== name);
+    list.unshift({ name, text: textFromModel(M) });
+    store.set('pips-saved', JSON.stringify(list.slice(0, 50)));
+    drawSaved(); $('#saveName').value = '';
+    shotStatus(`Saved "${name}" in this browser.`, 'ok');
+  };
+  $('#loadSaved').onclick = () => { const v = $('#saved').value, p = loadSavedList()[+v]; if (v !== '' && p) { setModel(modelFromText(p.text)); showErrors([]); } };
+  $('#delSaved').onclick = () => { const v = $('#saved').value; if (v === '') return; const list = loadSavedList(); list.splice(+v, 1); store.set('pips-saved', JSON.stringify(list)); drawSaved(); };
+
+  // screenshot reading through Claude
+  let shotBlob = null, shotCtl = null, sample = null;
+  function shotStatus(msg, kind) { const s = $('#shotStatus'); s.hidden = !msg; s.className = 'status ' + (kind || ''); s.textContent = msg; }
+  function takeImage(file) {
+    if (!file || !/^image\//.test(file.type)) return;
+    shotBlob = file;
+    const img = $('#shotImg'); img.src = URL.createObjectURL(file); img.hidden = false;
+    $('#readShot').disabled = !sample; shotStatus('');
+  }
+  $('#shotFile').onchange = e => takeImage(e.target.files[0]);
+  const shot = $('#shot');
+  shot.addEventListener('dragover', e => { e.preventDefault(); shot.classList.add('drag'); });
+  shot.addEventListener('dragleave', () => shot.classList.remove('drag'));
+  shot.addEventListener('drop', e => { e.preventDefault(); shot.classList.remove('drag'); takeImage(e.dataTransfer.files[0]); });
+  document.addEventListener('paste', e => {
+    if (tab !== 'custom') return;
+    const item = [...((e.clipboardData && e.clipboardData.items) || [])].find(i => i.type.startsWith('image/'));
+    if (item) { e.preventDefault(); takeImage(item.getAsFile()); }
+  });
+  const SHOT_PROMPT = [
+    'This image is a screenshot of a NYT "Pips" domino puzzle. Transcribe it exactly into the text format below.',
+    '',
+    'Format rules:',
+    '- "board:" then one line per grid row, top to bottom. Treat the board as a square grid where every cell position is one character. A letter marks a cell in a region: cells inside the same dashed outline share a letter, and separate regions get different letters even when they share a colour. "#" is a playable cell with no region (a plain tile with no dashed outline). "." is a position with no cell. Keep empty columns or rows between separate parts of the board as "." so positions line up.',
+    '- "regions:" then one line per region letter: the letter, the rule from its diamond badge, then its colour word. Rules: a number N means the cells add up to N; "<N" means the sum is less than N; ">N" means greater than N; "=" means all equal; "!=" means all different. A region with no badge uses "any". Colour is one of: purple, pink, teal, orange, olive, navy, gray.',
+    '- "dominoes:" then every domino in the tray, left to right, top row first, as two digits (pips on the left half, then the right half; a blank half is 0), separated by spaces.',
+    '- The number of cells (letters and #) must equal twice the number of dominoes. Count carefully.',
+    '',
+    'Example:',
+    PUZZLES.easy.replace('# Easy\n', ''),
+    '',
+    'Reply with only the puzzle text in this format and nothing else.'
+  ].join('\n');
+  $('#readShot').onclick = async () => {
+    if (!sample || !shotBlob) return;
+    shotCtl = new AbortController();
+    $('#readShot').disabled = true; $('#stopShot').hidden = false;
+    shotStatus('Claude is reading the screenshot. This usually takes under a minute…');
+    try {
+      const { text } = await sample(SHOT_PROMPT, { images: [shotBlob], modelTier: 'complex', signal: shotCtl.signal });
+      const body = text.replace(/```[a-z]*\n?/g, '').trim();
+      const p = parsePuzzle(body);
+      setModel(modelFromText(body));
+      showErrors(p.errors);
+      shotStatus(p.errors.length ? 'Read the screenshot, but some details need fixing (listed below). Compare with the image and adjust.' : 'Done. Compare the board, rules and tray with your screenshot, fix anything that looks off, then solve.', p.errors.length ? 'err' : 'ok');
+    } catch (e) {
+      const code = e && e.code;
+      const msg = { cancelled: '', not_granted: 'This page isn’t allowed to use Claude, so build the puzzle by hand below.', sampling_disabled: 'Claude isn’t available on this account. Build the puzzle by hand below.', rate_limited: 'Too many requests right now. Try again in a little while.', image_rejected: 'That image couldn’t be used. Try a PNG or JPEG screenshot.', images_unavailable: 'This view can’t send images to Claude. Build the puzzle by hand below.', refused: 'Claude couldn’t read that image. Try a tighter screenshot of just the puzzle.' }[code];
+      shotStatus(msg ?? 'Something went wrong reading the screenshot. Try again.', 'err');
+      if (['not_granted', 'images_unavailable', 'sampling_disabled'].includes(code)) { $('#shotOn').hidden = true; }
+    } finally {
+      $('#readShot').disabled = !shotBlob || !sample; $('#stopShot').hidden = true;
+    }
+  };
+  $('#stopShot').onclick = () => { if (shotCtl) shotCtl.abort(); };
+  (async () => {
+    try {
+      if (!window.claude || !window.claude.use) return;
+      const s = await window.claude.use('sample');
+      if (!s) return;
+      const lim = await s.limits().catch(() => null);
+      if (!lim || !lim.images) return;
+      sample = s;
+      $('#shotOn').hidden = false; $('#shotOff').hidden = true;
+      $('#shotFile').accept = lim.images.mediaTypes.join(',');
+      $('#readShot').disabled = !shotBlob;
+    } catch (e) {}
+  })();
+
+  function showErrors(list) {
+    const ul = $('#errs');
+    ul.hidden = !list.length;
+    ul.innerHTML = list.map(e => `<li>${esc(e)}</li>`).join('');
+  }
+  function selectTab(k) {
+    stop(); tab = k; store.set('pips-tab', k);
+    document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.k === k)));
+    $('#editor').hidden = k !== 'custom';
+    if (k === 'custom') {
+      if (!M) setModel(modelFromText(store.get('pips-custom') || PUZZLES.hard.replace('# Hard', '# My puzzle')));
+      drawSaved();
+      const p = run(textFromModel(M)); showErrors(p.errors);
+    } else { showErrors([]); run(PUZZLES[k]); }
+  }
+  document.querySelectorAll('.tabs button').forEach(b => { b.onclick = () => selectTab(b.dataset.k); });
+
+  const saved = store.get('pips-tab');
+  selectTab(['easy', 'medium', 'hard', 'custom'].includes(saved) ? saved : 'easy');
+})();
+</script>

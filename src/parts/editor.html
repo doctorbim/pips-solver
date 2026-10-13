@@ -1,0 +1,68 @@
+  <section class="panel editor" id="editor" hidden>
+    <div class="ed-head">
+      <h2>Puzzle creator</h2>
+      <div class="row">
+        <select id="saved" class="fld" style="width:auto" aria-label="Saved puzzles"><option value="">My saved puzzles…</option></select>
+        <button class="btn" id="loadSaved">Load</button>
+        <button class="btn" id="delSaved">Delete</button>
+      </div>
+    </div>
+    <div class="ed-grid">
+      <div class="ed-col">
+        <div class="shot" id="shot">
+          <p class="ed-step">1 · Read a screenshot (optional)</p>
+          <div id="shotOn" hidden>
+            <p class="note">Drop or paste a Pips screenshot here, or choose a file. Claude reads the board, regions and tray into the creator below. Compare the result with your screenshot before solving.</p>
+            <div class="row" style="margin-top:8px">
+              <input type="file" id="shotFile" accept="image/png,image/jpeg,image/webp" aria-label="Screenshot file">
+              <button class="btn primary" id="readShot" disabled>Read puzzle</button>
+              <button class="btn" id="stopShot" hidden>Stop</button>
+            </div>
+          </div>
+          <p class="note" id="shotOff">Screenshot reading works when this page is open on claude.ai and you allow it to use Claude. You can always build the puzzle by hand below.</p>
+          <img id="shotImg" alt="Your screenshot" hidden>
+          <p class="status" id="shotStatus" hidden></p>
+        </div>
+        <div>
+          <p class="ed-step">2 · Paint the board</p>
+          <div class="sz">
+            <label>Rows <input type="number" id="rows" min="1" max="12" value="4"></label>
+            <label>Columns <input type="number" id="cols" min="1" max="12" value="4"></label>
+            <button class="btn" id="clearBoard">Clear board</button>
+          </div>
+          <p class="check" style="margin:8px 0">Pick a brush, then click or drag across cells. Each dashed region on your puzzle gets its own brush.</p>
+          <div class="brushes" id="brushes"></div>
+          <div class="paint" style="margin-top:10px"><div class="paint-grid" id="paint"></div></div>
+        </div>
+      </div>
+      <div class="ed-col">
+        <div>
+          <p class="ed-step">3 · Set region rules</p>
+          <div class="regs" id="regs"></div>
+          <button class="btn" id="newReg" style="margin-top:8px">+ New region</button>
+        </div>
+        <div>
+          <p class="ed-step">4 · Fill the tray</p>
+          <div class="dlist" id="dlist"></div>
+          <div class="addd" style="margin-top:8px">
+            <select id="dA" aria-label="First half pips"></select>
+            <select id="dB" aria-label="Second half pips"></select>
+            <button class="btn" id="addD">Add domino</button>
+          </div>
+          <p class="check" id="tally" style="margin-top:6px"></p>
+        </div>
+        <ul class="errors" id="errs" hidden></ul>
+        <div class="row">
+          <button class="btn primary" id="solve">Solve this puzzle</button>
+          <input type="text" id="saveName" class="fld" placeholder="Name, e.g. Oct 13 Hard" aria-label="Puzzle name" style="flex:1 1 140px;width:auto;padding:8px">
+          <button class="btn" id="save">Save</button>
+        </div>
+        <details>
+          <summary>Text format (edit directly, or copy to share)</summary>
+          <textarea id="src" spellcheck="false" aria-label="Puzzle as text"></textarea>
+          <div class="row" style="margin-top:6px"><button class="btn" id="applyText">Apply text to creator</button></div>
+          <p><code>board:</code> one line per row. A letter is a region cell, <code>#</code> a cell with no rule, <code>.</code> a gap. <code>regions:</code> letter, rule (<code>6</code>, <code>&lt;4</code>, <code>&gt;8</code>, <code>=</code>, <code>!=</code>, <code>any</code>), optional colour. <code>dominoes:</code> pairs like <code>66 61 30</code>; a blank half is 0.</p>
+        </details>
+      </div>
+    </div>
+  </section>
